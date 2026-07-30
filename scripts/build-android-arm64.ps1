@@ -7,7 +7,8 @@ param(
     [string]$NdkVersion = '28.1.13356709',
     [string]$VcpkgRoot = 'C:\Users\c2320\Documents\ccore-openvpn3-vcpkg',
     [string]$BuildDirectory = 'out\android-arm64-v8a-api23-ndk28',
-    [string]$OutputDirectory = 'dist\android\arm64-v8a'
+    [string]$OutputDirectory = 'dist\android\arm64-v8a',
+    [string]$ReleaseCommit = ''
 )
 
 Set-StrictMode -Version Latest
@@ -110,8 +111,16 @@ if ($header -notmatch '(?m)^#define CCORE_OVPN3_ABI_VERSION 2$') {
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'ccore\include\ccore_openvpn3.h') -Destination (Join-Path $outputPath 'ccore_openvpn3.h') -Force
 
 $outputItem = Get-Item -LiteralPath $outputLibrary
-$forkCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the fork commit.' }
+$sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the source commit.' }
+$sourceTree = (& git -C $repositoryRoot rev-parse 'HEAD^{tree}').Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the source tree.' }
+$forkCommit = if ([string]::IsNullOrWhiteSpace($ReleaseCommit)) {
+    $sourceCommit
+} else {
+    $ReleaseCommit.Trim().ToLowerInvariant()
+}
+if ($forkCommit -notmatch '^[0-9a-f]{40}$') { throw "Invalid release commit: $forkCommit" }
 [PSCustomObject]@{
     Library = $outputLibrary
     Bytes = $outputItem.Length
@@ -123,5 +132,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the fork commit.' }
     AndroidAPI = 23
     OpenVPN3UpstreamCommit = '1512c16622288f3c01da09d3278ac61a86dca26d'
     ForkCommit = $forkCommit
+    SourceCommit = $sourceCommit
+    SourceTree = $sourceTree
     License = 'MPL-2.0'
 }

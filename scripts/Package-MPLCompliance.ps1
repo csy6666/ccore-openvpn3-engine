@@ -6,7 +6,9 @@ param(
     [string]$Output = 'dist\compliance\ccore-openvpn3-mpl-compliance.zip',
     [string]$BuildDirectory = 'out\android-arm64-v8a-api23-ndk28',
     [string]$EngineLibrary = 'dist\android\arm64-v8a\libccore_openvpn3.so',
-    [string]$AndroidNdk = "$env:LOCALAPPDATA\Android\Sdk\ndk\28.1.13356709"
+    [string]$AndroidNdk = "$env:LOCALAPPDATA\Android\Sdk\ndk\28.1.13356709",
+    [string]$ReleaseCommit = '',
+    [string]$ReleaseCommitDate = ''
 )
 
 Set-StrictMode -Version Latest
@@ -61,11 +63,23 @@ foreach ($required in @($buildRoot, $enginePath, $ndkRoot)) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Required compliance input is missing: $required" }
 }
 
-$head = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the fork commit.' }
-& git -C $repositoryRoot merge-base --is-ancestor $pinnedCommit $head
-if ($LASTEXITCODE -ne 0) { throw "OpenVPN 3 base commit $pinnedCommit is not an ancestor of $head" }
-$sourceDate = [DateTimeOffset]::Parse((& git -C $repositoryRoot show -s --format=%cI $head).Trim()).ToUniversalTime()
+$sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the source commit.' }
+$sourceTree = (& git -C $repositoryRoot rev-parse 'HEAD^{tree}').Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the source tree.' }
+& git -C $repositoryRoot merge-base --is-ancestor $pinnedCommit $sourceCommit
+if ($LASTEXITCODE -ne 0) { throw "OpenVPN 3 base commit $pinnedCommit is not an ancestor of $sourceCommit" }
+$forkCommit = if ([string]::IsNullOrWhiteSpace($ReleaseCommit)) {
+    $sourceCommit
+} else {
+    $ReleaseCommit.Trim().ToLowerInvariant()
+}
+if ($forkCommit -notmatch '^[0-9a-f]{40}$') { throw "Invalid release commit: $forkCommit" }
+$sourceDate = if ([string]::IsNullOrWhiteSpace($ReleaseCommitDate)) {
+    [DateTimeOffset]::Parse((& git -C $repositoryRoot show -s --format=%cI $sourceCommit).Trim()).ToUniversalTime()
+} else {
+    [DateTimeOffset]::Parse($ReleaseCommitDate).ToUniversalTime()
+}
 
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $tempPrefix = $tempRoot.TrimEnd('\') + '\'
@@ -84,7 +98,7 @@ try {
     & git -C $repositoryRoot archive --format=zip --output=$upstreamArchive $pinnedCommit
     if ($LASTEXITCODE -ne 0) { throw 'git archive failed for the pinned OpenVPN 3 source.' }
 
-    $committedChanges = @(& git -C $repositoryRoot diff --name-only --diff-filter=ACMRTUXB "$pinnedCommit..$head")
+    $committedChanges = @(& git -C $repositoryRoot diff --name-only --diff-filter=ACMRTUXB "$pinnedCommit..$sourceCommit")
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed while collecting the committed fork overlay.' }
     $workingChanges = @(& git -C $repositoryRoot diff --name-only --diff-filter=ACMRTUXB)
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed while collecting the working fork overlay.' }
@@ -118,7 +132,9 @@ try {
     Write-Json (Join-Path $sourceRoot 'CCORE-FORK-MANIFEST.json') ([ordered]@{
         schemaVersion = 1
         upstreamCommit = $pinnedCommit
-        forkCommit = $head
+        forkCommit = $forkCommit
+        sourceCommit = $sourceCommit
+        sourceTree = $sourceTree
         selectedLicense = 'MPL-2.0'
         files = $overlayManifestRows
     })
@@ -179,7 +195,9 @@ try {
         abi = 'arm64-v8a'
         androidApi = 23
         upstreamCommit = $pinnedCommit
-        forkCommit = $head
+        forkCommit = $forkCommit
+        sourceCommit = $sourceCommit
+        sourceTree = $sourceTree
         selectedLicense = 'MPL-2.0'
         upstreamSourceSha256 = (Get-FileHash -LiteralPath $upstreamArchive -Algorithm SHA256).Hash.ToUpperInvariant()
         forkOverlaySha256 = (Get-FileHash -LiteralPath $overlayArchive -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -207,7 +225,9 @@ try {
         Bytes = (Get-Item -LiteralPath $outputPath).Length
         Sha256 = (Get-FileHash -LiteralPath $outputPath -Algorithm SHA256).Hash.ToUpperInvariant()
         UpstreamCommit = $pinnedCommit
-        ForkCommit = $head
+        ForkCommit = $forkCommit
+        SourceCommit = $sourceCommit
+        SourceTree = $sourceTree
         OverlayFileCount = $overlayFiles.Count
         EngineSha256 = (Get-FileHash -LiteralPath $enginePath -Algorithm SHA256).Hash.ToUpperInvariant()
     }

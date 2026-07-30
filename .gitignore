@@ -3,6 +3,8 @@ x64
 *.vcxproj.user
 *.ipch
 out
+dist
+build-*.log
 .vs
 .vscode
 tags*

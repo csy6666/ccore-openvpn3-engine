@@ -1,0 +1,18 @@
+CCORE_OPENVPN3_2 {
+    global:
+        ccore_ovpn3_abi_version;
+        ccore_ovpn3_version;
+        ccore_ovpn3_license;
+        ccore_ovpn3_eval_profile;
+        ccore_ovpn3_client_create;
+        ccore_ovpn3_client_start;
+        ccore_ovpn3_client_ready;
+        ccore_ovpn3_client_reconnect;
+        ccore_ovpn3_client_stop;
+        ccore_ovpn3_client_destroy;
+        ccore_ovpn3_client_read_packet;
+        ccore_ovpn3_client_write_packet;
+        ccore_ovpn3_client_last_error;
+    local:
+        *;
+};

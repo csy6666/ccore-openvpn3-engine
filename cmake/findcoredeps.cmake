@@ -145,7 +145,9 @@ function(add_corelibrary_dependencies target)
         target_link_libraries(${target} ${coreFoundation} ${iokit} ${coreServices} ${systemConfiguration} ${lz4})
     endif()
 
-    if(UNIX)
+    # Android's pthread API is provided by bionic libc; there is no standalone
+    # libpthread to link.  CMake still reports Android as UNIX.
+    if(UNIX AND NOT ANDROID)
         target_link_libraries(${target} pthread)
     endif()
 

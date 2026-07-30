@@ -35,6 +35,12 @@ include(CTest)
 include(findcoredeps)
 include(ovpn-doxygen)
 
+option(BUILD_CCORE_ENGINE "Build the c-core OpenVPN 3 MPL bridge only" OFF)
+if (BUILD_CCORE_ENGINE)
+    add_subdirectory(ccore)
+    return()
+endif ()
+
 add_subdirectory(client)
 add_subdirectory(test/unittests)
 add_subdirectory(test/ovpncli)
